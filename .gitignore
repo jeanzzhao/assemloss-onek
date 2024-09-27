@@ -1,0 +1,12 @@
+*/.snakemake/
+grist/genbank_cache/
+grist/*.zip
+grist/outputs*/
+workflow/*megahit*
+workflow/*gz
+workflow/*bam
+workflow/.snakemake/
+workflow/*sig
+workflow/*png
+workflow/*cvs
+workflow/*txt
