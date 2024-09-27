@@ -1,0 +1,141 @@
+PAIRS, = glob_wildcards('../grist/outputs/mapping/{pair}.mapped.fq.gz')
+print(PAIRS)
+
+METAGENOMES = set([x.split('.x.')[0] for x in PAIRS])
+print(METAGENOMES)
+
+from collections import defaultdict
+genomeDict = defaultdict(list)
+for pair in PAIRS:
+    metagenome, genome = pair.split('.x.')
+    genomeDict[metagenome].append(genome)
+print(genomeDict)
+
+rule all:
+    input:
+        expand("{metagenome}.megahit.fa.gz.sig", metagenome=METAGENOMES),
+        expand("../grist/outputs/mapping/{metagenome}.refmapped.sig.zip", metagenome=METAGENOMES),
+        expand("{metagenome}.x.ma.fq.gz.sig", metagenome=METAGENOMES),
+        expand("{metagenome}.trim.refmap.mapassem.venn.png", metagenome=METAGENOMES),
+        expand("{metagenome}.tram.upset.png", metagenome=METAGENOMES),
+        expand("{metagenome}.table.csv", metagenome=METAGENOMES),
+
+# assemble trimmed reads
+rule assembly:
+    input: "../grist/outputs/trim/{metagenome}.trim.fq.gz",
+    output:
+        fagz = "{metagenome}.megahit.fa.gz",
+        dir = directory("{metagenome}.megahit.d"),
+    conda: "env-workflow.yml"
+    threads: 32
+    shell: """
+        megahit --12 {input} -f -o {output.dir} -t {threads} -m 100e9 && \
+        gzip -9c {output.dir}/final.contigs.fa > {output.fagz}
+    """
+
+# align trimmed reads to assembly
+rule minimap:
+    input:
+        assembly= "{metagenome}.megahit.fa.gz",
+        trimmed_reads="../grist/outputs/trim/{metagenome}.trim.fq.gz",
+    output: "{metagenome}.x.ma.bam",
+    conda: "env-workflow.yml"
+    threads: 16
+    shell: """
+        minimap2 -ax sr -t 16 {input.assembly} {input.trimmed_reads} \
+        | samtools view -b -F 4 - | samtools sort - > {output}
+    """
+
+# convert .bam to .fq file
+rule bam2fq:
+    input: bamfile = "{metagenome}.x.ma.bam",
+    output: samfile = "{metagenome}.x.ma.fq.gz",
+    conda: "env-workflow.yml"
+    threads: 1
+    shell: """
+        samtools bam2fq {input.bamfile} | gzip -9c > {output.samfile}
+    """
+
+# sketch refmapped reads
+rule sketch_refmapp_reads:
+    input: lambda w: expand("../grist/outputs/mapping/{{metagenome}}.x.{genome}.mapped.fq.gz", genome= genomeDict[w.metagenome]),
+    input: "../grist/outputs/mapping/{metagenome}.x.{genome}.mapped.fq.gz",
+    output: "../grist/outputs/mapping/{metagenome}.refmapped.sig.zip",
+    conda: "env-workflow.yml"
+    shell: """
+        sourmash sketch dna -p abund {input} --name  -o {output}
+    """
+#    input: "../grist/outputs/mapping/{metagenome}.summary.csv",
+#    output:
+#        map_file_list = "../grist/outputs/mapping/{metagenome}.mapped.list.txt",
+#        sketch = "../grist/outputs/mapping/{metagenome}.refmapped.sig.zip",
+#    conda: "env-workflow.yml"
+#    shell: """
+#        ln -s ../grist/outputs/mapping/{wildcards.metagenome}.x.*.mapped.fq.gz > \
+#        ../grist/outputs/mapping/{output.map_file_list} && \
+#        sourmash sketch dna -p abund --from-file {output.map_file_list} -o {output.sketch}
+#    """
+
+# sketch assembly
+rule sketch_assembly:
+    input: assembly = "{metagenome}.megahit.fa.gz",
+    output: assembly_sig = "{metagenome}.megahit.fa.gz.sig",
+    conda: "env-workflow.yml"
+    shell: """
+        sourmash sketch dna -p k=31,k=21,k=51,abund {input.assembly} -o {output.assembly_sig}
+    """
+
+# sketch reads mapped to assembly
+rule sketch_mapassem:
+    input: mapassem = "{metagenome}.x.ma.fq.gz",
+    output: mapassem_sig = "{metagenome}.x.ma.fq.gz.sig",
+    conda: "env-workflow.yml"
+    shell: """
+        sourmash sketch dna -p k=31,k=21,k=51,abund {input.mapassem} -o {output.mapassem_sig}
+    """
+# sketch of all trimmed reads can be found in /grist/outputs/sigs
+
+# Venn diagram
+rule Venn:
+    input:
+        trim = "../grist/outputs/sigs/{metagenome}.trim.sig.zip",
+        refmap = "../grist/outputs/mapping/{metagenome}.refmapped.sig.zip",
+#        assembly = "{metagenome}.megahit.fa.gz.sig",
+        mapassem = "{metagenome}.x.ma.fq.gz.sig",
+    output:
+        trm = "{metagenome}.trim.refmap.mapassem.venn.png",
+    conda: "env-workflow.yml"
+    shell: """
+        sourmash scripts venn {input.trim} {input.refmap} {input.mapassem} \
+        -k31 -o {output} --ident
+    """
+
+# Upset diagram
+rule Upset:
+    input:
+        trim = "../grist/outputs/sigs/{metagenome}.trim.sig.zip",
+        refmap = "../grist/outputs/mapping/{metagenome}.refmapped.sig.zip",
+        assembly = "{metagenome}.megahit.fa.gz.sig",
+        mapassem = "{metagenome}.x.ma.fq.gz.sig",
+    output:
+        tram= "{metagenome}.tram.upset.png",
+    conda: "env-workflow.yml"
+    shell: """
+        sourmash scripts upset {input.trim} {input.refmap} {input.assembly} \
+        {input.mapassem} -k31 -o {output} --show-singletons
+    """
+
+# table content
+rule table_content:
+    input:
+        trim = "../grist/outputs/sigs/{metagenome}.trim.sig.zip",
+        refmap = "../grist/outputs/mapping/{metagenome}.refmapped.sig.zip",
+        assembly = "{metagenome}.megahit.fa.gz.sig",
+        mapassem = "{metagenome}.x.ma.fq.gz.sig",
+    output:
+        csv = "{metagenome}.table.csv",
+        txt = "{metagenome}.table.txt",
+    conda: "env-workflow.yml"
+    shell: """
+        ../workflow/summarize-ref-assembly.py -t ./ -o {output.csv} > {output.txt}
+    """
