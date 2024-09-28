@@ -58,8 +58,8 @@ rule bam2fq:
 
 # sketch refmapped reads
 rule sketch_refmapp_reads:
-    input: lambda w: expand("../grist/outputs/mapping/{{metagenome}}.x.{genome}.mapped.fq.gz", genome= genomeDict[w.metagenome]),
-    input: "../grist/outputs/mapping/{metagenome}.x.{genome}.mapped.fq.gz",
+    input: lambda w: expand("../grist/outputs/mapping/{{metagenome}}.x.{genome}.mapped.fq.gz", \
+genome= genomeDict[w.metagenome]),
     output: "../grist/outputs/mapping/{metagenome}.refmapped.sig.zip",
     conda: "env-workflow.yml"
     shell: """
@@ -140,5 +140,5 @@ rule table_content:
         txt = "{metagenome}.table.txt",
     conda: "env-workflow.yml"
     shell: """
-        ./summarize-ref-assembly.py -t ./ -o {output.csv} {wildcards.metagenome} > {output.txt}
+        python summarize-ref-assembly.py -t ./ -o {output.csv} {wildcards.metagenome} > {output.txt}
     """
