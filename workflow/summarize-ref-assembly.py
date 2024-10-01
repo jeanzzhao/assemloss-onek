@@ -100,8 +100,8 @@ def main(argv):
 
     tld = args.top_level_directory.rstrip('/') + '/'
     grist_dir = os.path.join(tld, 'grist/outputs')
-    assembly_dir = os.path.join(tld, 'assembly/')
-    atta_dir = os.path.join(tld, 'atta/')
+    assembly_dir = os.path.join(tld, 'workflow/')
+    atta_dir = os.path.join(tld, 'workflow/')
 
     for path in (tld, grist_dir, assembly_dir, atta_dir):
         assert os.path.isdir(path), f'{path} is not a directory or does not exist?'
