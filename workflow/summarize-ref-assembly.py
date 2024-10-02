@@ -20,7 +20,7 @@ class MetagenomeInfo:
 
         self.metag_sig_path = os.path.join(grist_dir, "sigs",
                                            f"{self.metag_acc}.trim.sig.zip")
-        self.metag_sig = sourmash_args.load_one_signature(self.metag_sig_path, ksize=self.ksize)
+        self.metag_sig = sourmash.load_one_signature(self.metag_sig_path, ksize=self.ksize)
     
 
     def calc(self, assembly_dir, grist_dir, atta_dir):
@@ -39,7 +39,7 @@ class MetagenomeInfo:
         sigfile = os.path.join(assembly_dir, f"{self.metag_acc}.megahit.fa.gz.sig")
         assert os.path.exists(sigfile), sigfile
 
-        self.assembly_sig = sourmash_args.load_one_signature(sigfile, ksize=self.ksize)
+        self.assembly_sig = sourmash.load_one_signature(sigfile, ksize=self.ksize)
 
         # percent of flat k-mers accounted for by assembly
         print(f"assembly/unweighted: {self.metag_sig.contained_by(self.assembly_sig)*100:.1f}%")
@@ -57,7 +57,7 @@ class MetagenomeInfo:
         self.assembly_f_weighted = intersect_weighted_sum / total_weighted_sum
 
         sig_mapped = os.path.join(atta_dir, f'{self.metag_acc}.x.ma.fq.gz.sig')
-        ma_sig = sourmash_args.load_one_signature(sig_mapped, ksize=self.ksize)
+        ma_sig = sourmash.load_one_signature(sig_mapped, ksize=self.ksize)
         print(f"% k-mers in reads mapped to assembly: {self.metag_sig.contained_by(ma_sig)*100:.1f}%")
         self.assembly_f_readmapped = self.metag_sig.contained_by(ma_sig)
 
